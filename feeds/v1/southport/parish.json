@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "id": "southport",
+  "name": "Southport Catholic Parish",
+  "summary": "Serving Southport, Labrador, Ashmore and the Gold Coast University Hospital community.",
+  "contact": {
+    "phone": "(07) 5510 2222",
+    "email": "parish@scp.org.au",
+    "website": "https://scp.org.au/"
+  },
+  "office": {
+    "address": "115 Scarborough Street, Southport QLD 4215",
+    "hours": {
+      "monday": "09:00-16:30",
+      "tuesday": "09:00-16:30",
+      "wednesday": "09:00-16:30",
+      "thursday": "09:00-16:30",
+      "friday": "09:00-16:30"
+    }
+  },
+  "clergy": [
+    {
+      "role": "Parish Priest",
+      "name": "Fr Gerard McMorrow"
+    },
+    {
+      "role": "Associate Pastor and Hospital Chaplain",
+      "name": "Fr John Hong Xuan Nguyen"
+    }
+  ],
+  "churches": [
+    {
+      "id": "guardian-angels",
+      "name": "Guardian Angels Church",
+      "address": "99 Scarborough Street, Southport QLD 4215",
+      "is_primary_site": true,
+      "location_type": "church"
+    },
+    {
+      "id": "st-joseph-the-worker",
+      "name": "St Joseph the Worker Church",
+      "address": "44 Imperial Parade, Labrador QLD 4215",
+      "is_primary_site": false,
+      "location_type": "church"
+    },
+    {
+      "id": "mary-immaculate",
+      "name": "Mary Immaculate Church",
+      "address": "31 Edmund Rice Drive, Ashmore QLD 4214",
+      "is_primary_site": false,
+      "location_type": "church"
+    },
+    {
+      "id": "gold-coast-university-hospital",
+      "name": "Gold Coast University Hospital",
+      "address": "1 Hospital Boulevard, Southport QLD 4215",
+      "is_primary_site": false,
+      "location_type": "chaplaincy"
+    }
+  ]
+}

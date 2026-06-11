@@ -14,8 +14,8 @@ import {
   validateFeed,
 } from "./web/calendar-core.js?v=5";
 
-const FEED_URL = "feeds/v1/calendar.json";
-const PARISH_FEED_URL = "feeds/v1/parish.json";
+const PARISH_REGISTRY_URL = "feeds/v1/parishes.json";
+const PARISH_STORAGE_KEY = "spcp-calendar-parish";
 const DEFAULT_EVENT_TYPES = ["mass", "confession"];
 const MULTICULTURAL_TYPE = "multicultural";
 const MULTICULTURAL_PRESIDER_SUBTYPES = new Map([
@@ -27,6 +27,8 @@ const MULTICULTURAL_PRESIDER_SUBTYPES = new Map([
 const state = {
   events: [],
   feed: null,
+  parishRegistry: null,
+  currentParish: null,
   selected: {
     eventType: new Set(),
     multiculturalSubtype: new Set(),
@@ -70,16 +72,24 @@ const elements = {
   navigationLinks: [...document.querySelectorAll(".navigation-link")],
   pagePanels: [...document.querySelectorAll("[data-page-panel]")],
   pageTitle: document.querySelector("#page-title"),
+  parishSelectorToggle: document.querySelector("#parish-selector-toggle"),
+  parishSelector: document.querySelector("#parish-selector"),
+  parishLogo: document.querySelector("#parish-logo"),
   parishName: document.querySelector("#parish-name"),
+  parishSummary: document.querySelector("#parish-summary"),
   parishOfficeAddress: document.querySelector("#parish-office-address"),
   parishPhone: document.querySelector("#parish-phone"),
   parishEmail: document.querySelector("#parish-email"),
   parishWebsite: document.querySelector("#parish-website"),
   parishHours: document.querySelector("#parish-hours"),
+  parishHoursCard: document.querySelector("#parish-hours-card"),
   parishClergy: document.querySelector("#parish-clergy"),
+  parishClergyCard: document.querySelector("#parish-clergy-card"),
   parishChurches: document.querySelector("#parish-churches"),
+  parishLocationsTitle: document.querySelector("#parish-locations-title"),
   aboutContent: document.querySelector("#about-content"),
   aboutError: document.querySelector("#about-error"),
+  diagnosticsLink: document.querySelector("#diagnostics-link"),
 };
 const mobileLayout = window.matchMedia("(max-width: 800px)");
 
@@ -125,6 +135,15 @@ function titleCase(value) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function activeParish() {
+  return state.parishRegistry?.parishes.find((parish) => parish.id === state.currentParish);
+}
+
+function closeParishSelector() {
+  elements.parishSelectorToggle.setAttribute("aria-expanded", "false");
+  elements.parishSelector.hidden = true;
+}
+
 function closeNavigation() {
   elements.navigationToggle.setAttribute("aria-expanded", "false");
   elements.navigationToggle.setAttribute("aria-label", "Open navigation");
@@ -141,9 +160,11 @@ function showPage(page) {
     else link.removeAttribute("aria-current");
   });
   elements.pageTitle.textContent = selectedPage === "about" ? "About the Parish" : "Calendar";
+  const parish = activeParish();
+  const parishTitle = parish?.short_name || "SPCP";
   document.title = selectedPage === "about"
-    ? "About the Parish · SPCP"
-    : "SPCP Parish Calendar";
+    ? `About the Parish · ${parishTitle}`
+    : `${parishTitle} Parish Calendar`;
   closeNavigation();
   window.scrollTo({ top: 0, behavior: "auto" });
   updateStickyOffset();
@@ -167,6 +188,8 @@ function renderParish(parish) {
     throw new Error(`Unsupported parish schema ${parish.schema_version ?? "(missing)"}.`);
   }
   elements.parishName.textContent = parish.name;
+  elements.parishSummary.textContent = parish.summary
+    || "Serving the Catholic community across Clear Island Waters, Broadbeach and Surfers Paradise.";
   elements.parishOfficeAddress.textContent = parish.office.address;
   elements.parishPhone.href = `tel:${parish.contact.phone.replace(/[^\d+]/g, "")}`;
   elements.parishPhone.textContent = parish.contact.phone;
@@ -175,17 +198,20 @@ function renderParish(parish) {
   elements.parishWebsite.href = parish.contact.website;
 
   const weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday"];
-  elements.parishHours.replaceChildren(...weekdays.map((day) => {
-    const hours = parish.office.hours[day];
+  const hours = parish.office?.hours || {};
+  const availableWeekdays = weekdays.filter((day) => hours[day]);
+  elements.parishHoursCard.hidden = availableWeekdays.length === 0;
+  elements.parishHours.replaceChildren(...availableWeekdays.map((day) => {
     const row = document.createElement("div");
     const term = document.createElement("dt");
     const description = document.createElement("dd");
     term.textContent = titleCase(day);
-    description.textContent = displayHours(hours);
+    description.textContent = displayHours(hours[day]);
     row.append(term, description);
     return row;
   }));
 
+  elements.parishClergyCard.hidden = !parish.clergy?.length;
   elements.parishClergy.replaceChildren(...parish.clergy.map((member) => {
     const item = document.createElement("article");
     const name = document.createElement("h4");
@@ -196,6 +222,8 @@ function renderParish(parish) {
     return item;
   }));
 
+  const hasChaplaincy = parish.churches.some((church) => church.location_type === "chaplaincy");
+  elements.parishLocationsTitle.textContent = hasChaplaincy ? "Churches and Chaplaincy" : "Churches";
   elements.parishChurches.replaceChildren(...parish.churches.map((church) => {
     const item = document.createElement("article");
     const heading = document.createElement("div");
@@ -207,7 +235,12 @@ function renderParish(parish) {
     if (church.is_primary_site) {
       const badge = document.createElement("span");
       badge.className = "primary-site-badge";
-      badge.textContent = "Parish office";
+      badge.textContent = "Primary church";
+      heading.append(badge);
+    } else if (church.location_type === "chaplaincy") {
+      const badge = document.createElement("span");
+      badge.className = "primary-site-badge";
+      badge.textContent = "Chaplaincy";
       heading.append(badge);
     }
     item.append(heading, address);
@@ -216,12 +249,15 @@ function renderParish(parish) {
   elements.aboutContent.hidden = false;
 }
 
-async function loadParish() {
+async function loadParish(url, parishId) {
   try {
-    const response = await fetch(PARISH_FEED_URL, { cache: "no-store" });
+    const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) throw new Error(`Parish feed returned ${response.status}.`);
-    renderParish(await response.json());
+    const parish = await response.json();
+    if (state.currentParish !== parishId) return;
+    renderParish(parish);
   } catch (error) {
+    if (state.currentParish !== parishId) return;
     elements.aboutError.hidden = false;
     elements.aboutError.textContent = `${error.message} The parish information is temporarily unavailable.`;
   }
@@ -495,14 +531,20 @@ function buildEventTypeFilters() {
 }
 
 function buildFilters() {
+  const eventTypes = uniqueValues((event) => [event.event_type]);
+  const churches = uniqueValues((event) => [displayChurch(event.church)]);
+  const presiders = uniqueValues((event) => event.presiders);
+
   buildEventTypeFilters();
+  elements.eventTypeFilters.closest(".filter-section").hidden = eventTypes.length === 0;
   buildCheckboxes(
     elements.churchFilters,
     "church",
-    uniqueValues((event) => [displayChurch(event.church)]),
+    churches,
   );
+  elements.churchFilters.closest(".filter-section").hidden = churches.length === 0;
   elements.presiderFilters.replaceChildren();
-  presiderGroups(uniqueValues((event) => event.presiders)).forEach((group, index) => {
+  presiderGroups(presiders).forEach((group, index) => {
     if (index) {
       const separator = document.createElement("div");
       separator.className = "filter-group-separator";
@@ -514,6 +556,7 @@ function buildFilters() {
     buildCheckboxes(groupContainer, "presider", group, displayPresider);
     elements.presiderFilters.append(groupContainer);
   });
+  elements.presiderFilters.closest(".filter-section").hidden = presiders.length === 0;
 }
 
 function matchesFilters(event) {
@@ -557,7 +600,11 @@ function makeTag(text) {
 }
 
 function eventAccentColour(event) {
-  return event.event_type === "confession" ? "violet" : liturgicalColour(event);
+  return {
+    confession: "violet",
+    rosary: "red",
+    novena: "gold",
+  }[event.event_type] || liturgicalColour(event);
 }
 
 function eventHasEnded(event, now = Date.now()) {
@@ -577,7 +624,14 @@ function updatePastStates(now = Date.now()) {
 
 function renderCard(event) {
   const card = elements.template.content.firstElementChild.cloneNode(true);
-  card.classList.add(churchClass(event.church));
+  const imageClass = churchClass(event.church);
+  card.classList.add(imageClass);
+  if (
+    imageClass === "church-unassigned"
+    && ["mass", MULTICULTURAL_TYPE].includes(event.event_type)
+  ) {
+    card.classList.add("event-mass-fallback");
+  }
   card.dataset.eventDate = eventDateKey(event);
   card.dataset.eventEnd = String(new Date(event.end).getTime());
   card.dataset.liturgicalColour = eventAccentColour(event);
@@ -586,9 +640,9 @@ function renderCard(event) {
   card.querySelector(".event-church").textContent = displayChurch(event.church);
   card.querySelector(".event-service").textContent = event.service_name;
   card.querySelector(".event-time").textContent = formatEventTime(event);
-  card.querySelector(".event-presider").textContent = event.presiders.length
-    ? event.presiders.map(displayPresider).join(", ")
-    : "Presider TBA";
+  const presider = card.querySelector(".event-presider");
+  presider.textContent = event.presiders.map(displayPresider).join(", ");
+  presider.hidden = !presider.textContent;
   const subtitle = card.querySelector(".event-subtitle");
   const observance = event.liturgical?.observance;
   subtitle.textContent = observance && observance !== event.service_name ? observance : "";
@@ -632,10 +686,7 @@ function makeEmptyDayMessage() {
 
 function renderDaily(events) {
   const start = dailyRangeStart();
-  const requestedEnd = addDays(start, state.dailyDaysVisible - 1);
-  const end = requestedEnd < state.feed.coverage.end
-    ? requestedEnd
-    : state.feed.coverage.end;
+  const end = dailyRangeEnd(events, start);
   const displayedDays = Math.round(
     (dateFromKey(end) - dateFromKey(start)) / 86_400_000,
   ) + 1;
@@ -654,7 +705,7 @@ function renderDaily(events) {
   loadMore.className = "load-more-button";
   loadMore.textContent = "Load more";
   loadMore.addEventListener("click", () => {
-    state.dailyDaysVisible += 14;
+    state.dailyDaysVisible = displayedDays + 14;
     renderEvents();
   });
 
@@ -665,6 +716,20 @@ function renderDaily(events) {
   elements.resultsCount.textContent =
     `${visible.length} event${visible.length === 1 ? "" : "s"} · ${displayedDays} days`;
   elements.emptyMessage.hidden = visible.length !== 0;
+}
+
+function dailyRangeEnd(events, start, minimumEvents = 10) {
+  const requestedEnd = addDays(start, state.dailyDaysVisible - 1);
+  let end = requestedEnd < state.feed.coverage.end
+    ? requestedEnd
+    : state.feed.coverage.end;
+  while (
+    end < state.feed.coverage.end
+    && eventsInRange(events, start, end).length < minimumEvents
+  ) {
+    end = addDays(end, 1);
+  }
+  return end;
 }
 
 function dailyRangeStart() {
@@ -1109,12 +1174,123 @@ function updateResponsiveSettings() {
   }
 }
 
-async function loadEvents() {
+function selectedParishId(registry) {
+  const requested = new URL(window.location.href).searchParams.get("parish");
+  const known = new Set(registry.parishes.map((parish) => parish.id));
+  if (known.has(requested)) return requested;
   try {
-    const response = await fetch(FEED_URL, { cache: "no-store" });
+    const saved = window.localStorage.getItem(PARISH_STORAGE_KEY);
+    if (known.has(saved)) return saved;
+  } catch {
+    // Storage can be unavailable in privacy-restricted browsing contexts.
+  }
+  return registry.default_parish;
+}
+
+function updateParishUrl(parishId) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("parish", parishId);
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function renderParishSelector() {
+  const options = state.parishRegistry.parishes.map((parish) => {
+    const button = document.createElement("button");
+    const logo = document.createElement("img");
+    const label = document.createElement("span");
+    button.type = "button";
+    button.className = "parish-selector-option";
+    button.role = "menuitemradio";
+    button.dataset.parishId = parish.id;
+    button.setAttribute("aria-checked", String(parish.id === state.currentParish));
+    logo.src = parish.logo;
+    logo.alt = "";
+    label.textContent = parish.name;
+    button.append(logo, label);
+    button.addEventListener("click", () => selectParish(parish.id));
+    button.addEventListener("keydown", (event) => {
+      const buttons = [...elements.parishSelector.querySelectorAll(".parish-selector-option")];
+      const currentIndex = buttons.indexOf(button);
+      const nextIndex = {
+        ArrowUp: (currentIndex - 1 + buttons.length) % buttons.length,
+        ArrowDown: (currentIndex + 1) % buttons.length,
+        Home: 0,
+        End: buttons.length - 1,
+      }[event.key];
+      if (nextIndex === undefined) return;
+      event.preventDefault();
+      buttons[nextIndex].focus();
+    });
+    return button;
+  });
+  elements.parishSelector.replaceChildren(...options);
+}
+
+function applyParishBranding(parish) {
+  document.body.dataset.theme = parish.theme;
+  elements.parishLogo.src = parish.logo;
+  elements.parishLogo.alt = parish.name;
+  elements.diagnosticsLink.href = `diagnostics.html?parish=${encodeURIComponent(parish.id)}`;
+  elements.parishSelector.querySelectorAll(".parish-selector-option").forEach((button) => {
+    button.setAttribute("aria-checked", String(button.dataset.parishId === parish.id));
+  });
+  showPage(currentPageFromHash());
+  updateStickyOffset();
+}
+
+async function selectParish(parishId, updateUrl = true) {
+  const parish = state.parishRegistry.parishes.find((candidate) => candidate.id === parishId)
+    || state.parishRegistry.parishes.find(
+      (candidate) => candidate.id === state.parishRegistry.default_parish,
+    );
+  state.currentParish = parish.id;
+  if (updateUrl) updateParishUrl(parish.id);
+  try {
+    window.localStorage.setItem(PARISH_STORAGE_KEY, parish.id);
+  } catch {
+    // Selection still works when persistent storage is unavailable.
+  }
+  closeParishSelector();
+  applyParishBranding(parish);
+  Object.values(state.selected).forEach((selection) => selection.clear());
+  state.useDefaultEventTypes = true;
+  state.feed = null;
+  state.events = [];
+  elements.events.replaceChildren();
+  elements.resultsCount.textContent = "Loading events...";
+  elements.errorMessage.hidden = true;
+  elements.aboutError.hidden = true;
+  elements.aboutContent.hidden = true;
+  await Promise.all([
+    loadEvents(parish.calendar_feed, parish.id),
+    loadParish(parish.parish_feed, parish.id),
+  ]);
+}
+
+async function loadParishRegistry() {
+  const response = await fetch(PARISH_REGISTRY_URL, { cache: "no-store" });
+  if (!response.ok) throw new Error(`Parish registry returned ${response.status}.`);
+  const registry = await response.json();
+  if (
+    registry.schema_version !== 1
+    || !Array.isArray(registry.parishes)
+    || !registry.parishes.length
+  ) {
+    throw new Error("Parish registry is invalid.");
+  }
+  state.parishRegistry = registry;
+  state.currentParish = selectedParishId(registry);
+  renderParishSelector();
+  await selectParish(state.currentParish, true);
+}
+
+async function loadEvents(url, parishId) {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) throw new Error(`Calendar feed returned ${response.status}.`);
     const feed = await response.json();
     validateFeed(feed);
+    if (state.currentParish !== parishId) return;
     state.feed = feed;
     state.events = feed.events;
     const today = currentBrisbaneDate();
@@ -1128,10 +1304,11 @@ async function loadEvents() {
     renderEvents();
     goToToday();
   } catch (error) {
+    if (state.currentParish !== parishId) return;
     elements.resultsCount.textContent = "Calendar unavailable";
     elements.errorMessage.hidden = false;
     elements.errorMessage.textContent =
-      `${error.message} Serve this folder with a local web server so the page can read ${FEED_URL}.`;
+      `${error.message} Serve this folder with a local web server so the page can read ${url}.`;
   }
 }
 
@@ -1154,6 +1331,11 @@ elements.filtersToggle.addEventListener("click", () => {
 elements.settingsClose.addEventListener("click", () => setSettingsExpanded(false));
 elements.settingsBackdrop.addEventListener("click", () => setSettingsExpanded(false));
 document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && elements.parishSelectorToggle.getAttribute("aria-expanded") === "true") {
+    closeParishSelector();
+    elements.parishSelectorToggle.focus();
+    return;
+  }
   if (event.key === "Escape" && elements.navigationToggle.getAttribute("aria-expanded") === "true") {
     closeNavigation();
     elements.navigationToggle.focus();
@@ -1161,6 +1343,20 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Escape" && elements.filtersToggle.getAttribute("aria-expanded") === "true") {
     setSettingsExpanded(false);
+  }
+});
+elements.parishSelectorToggle.addEventListener("click", () => {
+  const expanded = elements.parishSelectorToggle.getAttribute("aria-expanded") === "true";
+  elements.parishSelectorToggle.setAttribute("aria-expanded", String(!expanded));
+  elements.parishSelector.hidden = expanded;
+  if (!expanded) {
+    const selected = elements.parishSelector.querySelector('[aria-checked="true"]');
+    (selected || elements.parishSelector.firstElementChild)?.focus();
+  }
+});
+document.addEventListener("click", (event) => {
+  if (!elements.parishSelectorToggle.closest(".brand-lockup").contains(event.target)) {
+    closeParishSelector();
   }
 });
 elements.navigationToggle.addEventListener("click", () => {
@@ -1201,7 +1397,6 @@ elements.nextPeriods.forEach((button) => {
 });
 
 updateResponsiveSettings();
-showPage(currentPageFromHash());
 updateStickyOffset();
 window.addEventListener("resize", updateStickyOffset);
 mobileLayout.addEventListener("change", updateResponsiveSettings);
@@ -1209,5 +1404,8 @@ window.setInterval(updatePastStates, 30_000);
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) updatePastStates();
 });
-loadEvents();
-loadParish();
+loadParishRegistry().catch((error) => {
+  elements.resultsCount.textContent = "Calendar unavailable";
+  elements.errorMessage.hidden = false;
+  elements.errorMessage.textContent = error.message;
+});

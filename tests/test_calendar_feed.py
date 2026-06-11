@@ -1,7 +1,7 @@
 import json
 import sys
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import patch
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -11,9 +11,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import calendar_feed
+import build_feed
 import parish_feed
 import refresh_calendar
 import refresh_parish
+import southport_feed
 
 
 BRISBANE = ZoneInfo("Australia/Brisbane")
@@ -222,6 +224,99 @@ class ParishGenerationTests(unittest.TestCase):
     def test_checked_in_parish_feed_validates(self):
         feed = json.loads(refresh_parish.OUTPUT_PATH.read_text(encoding="utf-8"))
         self.assertEqual(parish_feed.validate_feed(feed), feed)
+
+
+class SouthportGenerationTests(unittest.TestCase):
+    def test_parish_feed_contains_churches_chaplaincy_and_current_clergy(self):
+        feed = southport_feed.build_parish_feed()
+        self.assertEqual(feed["id"], "southport")
+        self.assertEqual(feed["contact"]["email"], "parish@scp.org.au")
+        self.assertEqual(feed["office"]["address"], "115 Scarborough Street, Southport QLD 4215")
+        self.assertEqual(
+            [member["name"] for member in feed["clergy"]],
+            ["Fr Gerard McMorrow", "Fr John Hong Xuan Nguyen"],
+        )
+        self.assertEqual(len(feed["churches"]), 4)
+        self.assertEqual(feed["churches"][-1]["location_type"], "chaplaincy")
+
+    def test_recurring_schedule_expands_weekly_and_monthly_services(self):
+        records = southport_feed.build_records(
+            datetime(2026, 6, 1, tzinfo=BRISBANE),
+            datetime(2026, 6, 9, tzinfo=BRISBANE),
+        )
+        indexed = {(record["title"], record["start"]) for record in records}
+        self.assertIn(
+            (
+                "Guardian Angels - Filipino Mass",
+                "2026-06-07T12:00:00+10:00",
+            ),
+            indexed,
+        )
+        self.assertIn(
+            (
+                "St Joseph the Worker - Mass",
+                "2026-06-03T19:00:00+10:00",
+            ),
+            indexed,
+        )
+        self.assertIn(
+            (
+                "Gold Coast University Hospital - Mass",
+                "2026-06-05T10:30:00+10:00",
+            ),
+            indexed,
+        )
+
+    def test_service_durations_and_liturgical_enrichment(self):
+        records = southport_feed.build_records(
+            datetime(2026, 6, 5, tzinfo=BRISBANE),
+            datetime(2026, 6, 6, tzinfo=BRISBANE),
+        )
+        reconciliation = next(
+            record for record in southport_feed.build_records(
+                datetime(2026, 6, 6, tzinfo=BRISBANE),
+                datetime(2026, 6, 7, tzinfo=BRISBANE),
+            )
+            if record["event_type"] == "confession"
+        )
+        self.assertEqual(
+            datetime.fromisoformat(reconciliation["end"])
+            - datetime.fromisoformat(reconciliation["start"]),
+            timedelta(minutes=30),
+        )
+        mass = next(record for record in records if record["event_type"] == "mass")
+        feed = calendar_feed.build_feed(
+            [mass],
+            [{"date": "2026-06-05", "observance": "Saint Boniface"}],
+            "2026-06-01T08:00:00+10:00",
+        )
+        self.assertEqual(feed["events"][0]["liturgical"]["observance"], "Saint Boniface")
+
+    def test_normalized_schedule_accepts_a_future_source_adapter(self):
+        replacement = [
+            southport_feed.weekly(
+                "newsletter-special",
+                "Guardian Angels",
+                0,
+                "18:00",
+                "mass",
+            )
+        ]
+        records = southport_feed.build_records(
+            datetime(2026, 6, 1, tzinfo=BRISBANE),
+            datetime(2026, 6, 2, tzinfo=BRISBANE),
+            replacement,
+        )
+        self.assertEqual(len(records), 1)
+        self.assertTrue(records[0]["source_id"].startswith("southport-schedule:newsletter-special"))
+
+    def test_registry_exposes_only_spcp_and_southport(self):
+        registry = build_feed.parish_registry()
+        self.assertEqual(
+            [parish["id"] for parish in registry["parishes"]],
+            ["surfers-paradise", "southport"],
+        )
+        self.assertNotIn("pilgrim", json.dumps(registry).lower())
 
 
 def sample_event(

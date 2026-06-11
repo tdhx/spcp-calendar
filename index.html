@@ -4,18 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SPCP Parish Calendar</title>
-  <link rel="stylesheet" href="styles.css?v=24">
+  <link rel="stylesheet" href="styles.css?v=27">
 </head>
 <body data-theme="spcp">
   <header class="page-header">
     <div class="brand-lockup">
-      <img
-        class="parish-logo"
-        src="assets/spcp-logo.png"
-        alt="Surfers Paradise Catholic Parish"
-        width="512"
-        height="160"
+      <button
+        id="parish-selector-toggle"
+        class="parish-selector-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="parish-selector"
+        aria-haspopup="menu"
+        aria-label="Choose parish"
       >
+        <img
+          id="parish-logo"
+          class="parish-logo"
+          src="assets/spcp-logo.png"
+          alt="Surfers Paradise Catholic Parish"
+          width="512"
+          height="160"
+        >
+        <span class="parish-selector-chevron" aria-hidden="true"></span>
+      </button>
+      <div id="parish-selector" class="parish-selector" role="menu" hidden></div>
     </div>
     <div class="header-copy">
       <div class="mobile-navigation-heading">
@@ -169,7 +182,7 @@
         aria-labelledby="view-weekly"
       ></div>
       <footer class="calendar-footer">
-        <a href="diagnostics.html">Feed diagnostics</a>
+        <a id="diagnostics-link" href="diagnostics.html?parish=surfers-paradise">Feed diagnostics</a>
       </footer>
     </section>
   </main>
@@ -178,7 +191,7 @@
     <header class="about-introduction">
       <p class="eyebrow">Our parish</p>
       <h2 id="parish-name">About the Parish</h2>
-      <p>Serving the Catholic community across Clear Island Waters, Broadbeach and Surfers Paradise.</p>
+      <p id="parish-summary">Serving the Catholic community across Clear Island Waters, Broadbeach and Surfers Paradise.</p>
     </header>
 
     <div id="about-error" class="message error-message" hidden></div>
@@ -194,13 +207,13 @@
         </address>
       </section>
 
-      <section class="about-card">
+      <section id="parish-hours-card" class="about-card">
         <p class="about-card-label">Opening times</p>
         <h3>Office Hours</h3>
         <dl id="parish-hours" class="hours-list"></dl>
       </section>
 
-      <section class="about-card">
+      <section id="parish-clergy-card" class="about-card">
         <p class="about-card-label">Pastoral team</p>
         <h3>Clergy</h3>
         <div id="parish-clergy" class="clergy-list"></div>
@@ -208,7 +221,7 @@
 
       <section class="about-card about-churches">
         <p class="about-card-label">Our community</p>
-        <h3>Churches</h3>
+        <h3 id="parish-locations-title">Churches</h3>
         <div id="parish-churches" class="church-list"></div>
       </section>
     </div>
@@ -231,6 +244,6 @@
     </article>
   </template>
 
-  <script type="module" src="app.js?v=32"></script>
+  <script type="module" src="app.js?v=34"></script>
 </body>
 </html>

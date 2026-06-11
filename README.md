@@ -5,6 +5,9 @@ contracts are:
 
 - `feeds/v1/calendar.json`
 - `feeds/v1/parish.json`
+- `feeds/v1/parishes.json`
+- `feeds/v1/southport/calendar.json`
+- `feeds/v1/southport/parish.json`
 
 The legacy `ios/` project is deprecated and currently outside the supported
 build, test, and publishing scope.
@@ -23,8 +26,11 @@ For deterministic local work using the checked-in intermediate JSONL files:
 ./build-calendar --offline
 ```
 
-The command refreshes the calendar sources and scrapes the parish homepage,
-then validates and atomically replaces both published v1 feeds.
+The command refreshes the calendar sources and parish data, generates
+Southport's baseline recurring service calendar, then validates and atomically
+replaces all published v1 feeds. Southport's normalized schedule definitions
+are intentionally source-independent so newsletter automation can replace the
+baseline later without changing the public feed contract.
 
 ## Preview the web viewer
 

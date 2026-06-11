@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "default_parish": "surfers-paradise",
+  "parishes": [
+    {
+      "id": "surfers-paradise",
+      "name": "Surfers Paradise Catholic Parish",
+      "short_name": "SPCP",
+      "theme": "spcp",
+      "logo": "assets/spcp-logo.png",
+      "calendar_feed": "feeds/v1/calendar.json",
+      "parish_feed": "feeds/v1/parish.json"
+    },
+    {
+      "id": "southport",
+      "name": "Southport Catholic Parish",
+      "short_name": "Southport",
+      "theme": "southport",
+      "logo": "assets/southport-logo.png",
+      "calendar_feed": "feeds/v1/southport/calendar.json",
+      "parish_feed": "feeds/v1/southport/parish.json"
+    }
+  ]
+}

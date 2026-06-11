@@ -1,8 +1,10 @@
-const FEED_URL = "feeds/v1/calendar.json";
+const PARISH_REGISTRY_URL = "feeds/v1/parishes.json";
 
 const title = document.querySelector("#diagnostics-title");
 const body = document.querySelector("#diagnostics-body");
 const errorMessage = document.querySelector("#diagnostics-error");
+const logo = document.querySelector("#diagnostics-logo");
+const backLink = document.querySelector(".back-link");
 
 function appendList(headingText, values) {
   const heading = document.createElement("h3");
@@ -18,7 +20,21 @@ function appendList(headingText, values) {
 
 async function loadDiagnostics() {
   try {
-    const response = await fetch(FEED_URL, { cache: "no-store" });
+    const registryResponse = await fetch(PARISH_REGISTRY_URL, { cache: "no-store" });
+    if (!registryResponse.ok) {
+      throw new Error(`Parish registry returned ${registryResponse.status}.`);
+    }
+    const registry = await registryResponse.json();
+    const requested = new URL(window.location.href).searchParams.get("parish");
+    const parish = registry.parishes.find((candidate) => candidate.id === requested)
+      || registry.parishes.find((candidate) => candidate.id === registry.default_parish);
+    document.body.dataset.theme = parish.theme;
+    document.title = `Feed Diagnostics · ${parish.short_name}`;
+    logo.src = parish.logo;
+    logo.alt = parish.name;
+    backLink.href = `index.html?parish=${encodeURIComponent(parish.id)}`;
+
+    const response = await fetch(parish.calendar_feed, { cache: "no-store" });
     if (!response.ok) throw new Error(`Calendar feed returned ${response.status}.`);
     const feed = await response.json();
     const generated = new Date(feed.generated_at);

@@ -45,9 +45,13 @@ def validate_feed(feed):
         or not church.get("name")
         or not church.get("address")
         or not isinstance(church.get("is_primary_site"), bool)
+        or church.get("location_type", "church") not in {"church", "chaplaincy"}
         for church in churches
     ):
-        raise ValueError("Each church must include its id, name, address and primary-site flag")
+        raise ValueError(
+            "Each location must include its id, name, address, valid location type "
+            "and primary-site flag"
+        )
     if len(church_ids) != len(set(church_ids)):
         raise ValueError("Parish feed contains duplicate church IDs")
     if sum(church["is_primary_site"] for church in churches) != 1:

@@ -13,7 +13,6 @@
   --blue-soft: #e3f2f8;
   --focus-ring: rgba(0, 117, 169, 0.18);
   --shadow: 0 14px 38px rgba(0, 73, 107, 0.1);
-  --header-gradient: linear-gradient(120deg, #005f8c 0%, #007caf 72%, #058ab9 100%);
 }
 
 body[data-theme="spcp"] {
@@ -21,6 +20,17 @@ body[data-theme="spcp"] {
   --theme-primary-deep: var(--blue-deep);
   --theme-highlight: var(--accent);
   --theme-highlight-soft: var(--accent-soft);
+  --theme-bar-gradient: linear-gradient(120deg, #005f8c 0%, #007caf 72%, #058ab9 100%);
+  --theme-bar-context: #ffd29e;
+}
+
+body[data-theme="southport"] {
+  --theme-primary: #5b2d82;
+  --theme-primary-deep: #41205f;
+  --theme-highlight: #c6a34a;
+  --theme-highlight-soft: #f7efd9;
+  --theme-bar-gradient: linear-gradient(120deg, #41205f 0%, #5b2d82 72%, #704096 100%);
+  --theme-bar-context: #f2d98f;
 }
 
 * {
@@ -70,13 +80,87 @@ button {
 }
 
 .brand-lockup {
+  position: relative;
   min-width: 0;
+}
+
+.parish-selector-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 100%;
+  padding: 3px 5px 3px 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.parish-selector-toggle:hover,
+.parish-selector-toggle[aria-expanded="true"] {
+  background: var(--blue-soft);
 }
 
 .parish-logo {
   display: block;
   width: min(100%, 170px);
+  max-height: 58px;
+  object-fit: contain;
+  object-position: left center;
   height: auto;
+}
+
+.parish-selector-chevron {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-right: 2px solid var(--theme-primary-deep);
+  border-bottom: 2px solid var(--theme-primary-deep);
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 160ms ease;
+}
+
+.parish-selector-toggle[aria-expanded="true"] .parish-selector-chevron {
+  transform: translateY(2px) rotate(225deg);
+}
+
+.parish-selector {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  min-width: 265px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.parish-selector-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-weight: 750;
+  text-align: left;
+}
+
+.parish-selector-option:hover,
+.parish-selector-option:focus-visible,
+.parish-selector-option[aria-checked="true"] {
+  background: var(--blue-soft);
+}
+
+.parish-selector-option img {
+  width: 82px;
+  height: 38px;
+  object-fit: contain;
+  object-position: left center;
 }
 
 .header-copy {
@@ -536,7 +620,7 @@ legend {
   padding: 8px 10px;
   border: 0;
   border-radius: 18px;
-  background: var(--header-gradient);
+  background: var(--theme-bar-gradient);
   color: #ffffff;
   box-shadow: var(--shadow);
 }
@@ -583,7 +667,7 @@ legend {
 }
 
 #results-context {
-  color: #ffd29e;
+  color: var(--theme-bar-context);
   font-size: 0.78em;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -796,6 +880,10 @@ button.month-day:hover {
   border-left-color: #d95f89;
 }
 
+.month-event[data-liturgical-colour="gold"] {
+  border-left-color: #b78a13;
+}
+
 .month-event.is-past {
   border-left-color: #9ca8ad;
   background: #edf1f2;
@@ -868,6 +956,10 @@ button.month-day:hover {
   --liturgical-accent: #d95f89;
 }
 
+.event-card[data-liturgical-colour="gold"] {
+  --liturgical-accent: #b78a13;
+}
+
 .event-card[data-liturgical-colour="parish"] {
   --liturgical-accent: var(--theme-primary);
 }
@@ -916,6 +1008,16 @@ button.month-day:hover {
 .church-st-vincents {
   --church-image: url("assets/sv-wc.jpg");
   --church-position: center 74%;
+}
+
+.event-mass-fallback {
+  --church-image: url("assets/mass-fallback.jpg");
+  --church-position: right 46%;
+}
+
+.event-mass-fallback::before {
+  background-repeat: no-repeat;
+  background-size: 58% auto;
 }
 
 .event-time {
@@ -1209,6 +1311,11 @@ button.month-day:hover {
 
   .parish-logo {
     width: min(100%, 155px);
+    max-height: 50px;
+  }
+
+  .parish-selector {
+    min-width: min(280px, calc(100vw - 36px));
   }
 
   .header-copy {

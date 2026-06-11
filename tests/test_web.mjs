@@ -17,6 +17,15 @@ import {
 
 const feed = JSON.parse(await readFile(new URL("../feeds/v1/calendar.json", import.meta.url)));
 const parishFeed = JSON.parse(await readFile(new URL("../feeds/v1/parish.json", import.meta.url)));
+const parishRegistry = JSON.parse(
+  await readFile(new URL("../feeds/v1/parishes.json", import.meta.url)),
+);
+const southportFeed = JSON.parse(
+  await readFile(new URL("../feeds/v1/southport/calendar.json", import.meta.url)),
+);
+const southportParishFeed = JSON.parse(
+  await readFile(new URL("../feeds/v1/southport/parish.json", import.meta.url)),
+);
 const appSource = await readFile(new URL("../app.js", import.meta.url), "utf8");
 const indexSource = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const diagnosticsSource = await readFile(
@@ -34,6 +43,30 @@ test("published parish feed has the versioned about-page contract", () => {
   assert.equal(parishFeed.id, "surfers-paradise");
   assert.equal(parishFeed.churches.length, 3);
   assert.equal(parishFeed.churches.filter((church) => church.is_primary_site).length, 1);
+});
+
+test("published parish registry exposes SPCP and Southport only", () => {
+  assert.equal(parishRegistry.schema_version, 1);
+  assert.equal(parishRegistry.default_parish, "surfers-paradise");
+  assert.deepEqual(
+    parishRegistry.parishes.map((parish) => parish.id),
+    ["surfers-paradise", "southport"],
+  );
+  assert.doesNotMatch(JSON.stringify(parishRegistry), /pilgrim/i);
+});
+
+test("published Southport feeds validate", () => {
+  assert.equal(validateFeed(southportFeed), southportFeed);
+  assert.equal(southportParishFeed.id, "southport");
+  assert.equal(southportParishFeed.churches.length, 4);
+  assert.equal(
+    southportParishFeed.churches.filter((location) => location.location_type === "chaplaincy").length,
+    1,
+  );
+  assert.ok(southportFeed.events.some((event) => event.event_subtype === "filipino"));
+  assert.ok(southportFeed.events.some((event) => event.event_subtype === "korean"));
+  assert.ok(southportFeed.events.some((event) => event.event_type === "adoration"));
+  assert.ok(southportFeed.events.some((event) => event.event_type === "novena"));
 });
 
 test("default filters match Masses and Reconciliation", () => {
@@ -92,7 +125,7 @@ test("card accents use known liturgical colours with a parish fallback", () => {
 });
 
 test("published module URLs use matching cache-busting revisions", () => {
-  assert.match(indexSource, /src="app\.js\?v=32"/);
+  assert.match(indexSource, /src="app\.js\?v=34"/);
   assert.match(appSource, /calendar-core\.js\?v=5/);
 });
 
@@ -100,9 +133,21 @@ test("header navigation switches between calendar and feed-driven parish views",
   assert.match(indexSource, /id="site-navigation"[\s\S]*?data-page="calendar"/);
   assert.match(indexSource, /data-page="about"[\s\S]*?>About the Parish</);
   assert.match(indexSource, /id="about-page"[\s\S]*?id="parish-churches"/);
-  assert.match(appSource, /const PARISH_FEED_URL = "feeds\/v1\/parish\.json"/);
+  assert.match(appSource, /const PARISH_REGISTRY_URL = "feeds\/v1\/parishes\.json"/);
   assert.match(appSource, /function renderParish\(parish\)/);
   assert.match(appSource, /window\.location\.hash === "#about"/);
+});
+
+test("header parish selector switches registered feeds and persists URL state", () => {
+  assert.match(indexSource, /id="parish-selector-toggle"[\s\S]*?aria-controls="parish-selector"/);
+  assert.match(indexSource, /class="parish-selector-chevron"/);
+  assert.match(appSource, /function selectParish\(parishId, updateUrl = true\)/);
+  assert.match(appSource, /url\.searchParams\.set\("parish", parishId\)/);
+  assert.match(appSource, /localStorage\.setItem\(PARISH_STORAGE_KEY, parish\.id\)/);
+  assert.match(appSource, /loadEvents\(parish\.calendar_feed, parish\.id\)/);
+  assert.match(appSource, /loadParish\(parish\.parish_feed, parish\.id\)/);
+  assert.match(stylesSource, /\.parish-selector-toggle \{/);
+  assert.match(stylesSource, /\.parish-selector \{/);
 });
 
 test("mobile navigation uses a hamburger-controlled dropdown", () => {
@@ -140,8 +185,8 @@ test("weekly view is selected by default", () => {
 test("feed diagnostics live on a separate page", () => {
   assert.doesNotMatch(indexSource, /id="diagnostics"/);
   assert.doesNotMatch(appSource, /renderDiagnostics/);
-  assert.match(indexSource, /href="diagnostics\.html"/);
-  assert.match(diagnosticsSource, /src="diagnostics\.js\?v=1"/);
+  assert.match(indexSource, /href="diagnostics\.html\?parish=surfers-paradise"/);
+  assert.match(diagnosticsSource, /src="diagnostics\.js\?v=2"/);
 });
 
 test("desktop settings remain in the left sidebar", () => {
@@ -187,9 +232,13 @@ test("desktop and mobile period navigation use separate layouts", () => {
 
 test("filter labels and reconciliation accents use the requested wording and colour", () => {
   assert.match(appSource, /multicultural: "Multicultural Masses"/);
-  assert.match(appSource, /event\.event_type === "confession" \? "violet"/);
+  assert.match(appSource, /confession: "violet"/);
+  assert.match(appSource, /rosary: "red"/);
+  assert.match(appSource, /novena: "gold"/);
   assert.match(appSource, /card\.dataset\.liturgicalColour = eventAccentColour\(event\)/);
   assert.match(appSource, /summary\.dataset\.liturgicalColour = eventAccentColour\(event\)/);
+  assert.match(stylesSource, /\.event-card\[data-liturgical-colour="gold"\]/);
+  assert.match(stylesSource, /\.month-event\[data-liturgical-colour="gold"\]/);
 });
 
 test("view changes use conditional scrolling and monthly does not jump", () => {
@@ -218,9 +267,39 @@ test("multicultural mass options start collapsed", () => {
 
 test("daily view is progressively loaded and period navigation omits Today", () => {
   assert.match(appSource, /dailyDaysVisible: 7/);
-  assert.match(appSource, /state\.dailyDaysVisible \+= 14/);
+  assert.match(appSource, /state\.dailyDaysVisible = displayedDays \+ 14/);
+  assert.match(appSource, /function dailyRangeEnd\(events, start, minimumEvents = 10\)/);
+  assert.match(appSource, /eventsInRange\(events, start, end\)\.length < minimumEvents/);
   assert.match(appSource, /Load more/);
   assert.doesNotMatch(indexSource, /id="today-period"/);
+});
+
+test("unknown presiders are omitted and empty filter categories are hidden", () => {
+  assert.doesNotMatch(appSource, /Presider TBA/);
+  assert.match(appSource, /presider\.hidden = !presider\.textContent/);
+  assert.match(
+    appSource,
+    /presiderFilters\.closest\("\.filter-section"\)\.hidden = presiders\.length === 0/,
+  );
+});
+
+test("unknown Mass locations use the supplied fallback artwork", () => {
+  assert.match(appSource, /card\.classList\.add\("event-mass-fallback"\)/);
+  assert.match(stylesSource, /\.event-mass-fallback \{[\s\S]*?assets\/mass-fallback\.jpg/);
+  assert.match(stylesSource, /\.event-mass-fallback::before \{[\s\S]*?background-size: 58% auto/);
+});
+
+test("calendar result bars inherit the active parish theme", () => {
+  assert.match(
+    stylesSource,
+    /body\[data-theme="spcp"\][\s\S]*?--theme-bar-gradient: linear-gradient/,
+  );
+  assert.match(
+    stylesSource,
+    /body\[data-theme="southport"\][\s\S]*?--theme-bar-gradient: linear-gradient/,
+  );
+  assert.match(stylesSource, /\.results-header \{[\s\S]*?background: var\(--theme-bar-gradient\)/);
+  assert.match(stylesSource, /#results-context \{[\s\S]*?color: var\(--theme-bar-context\)/);
 });
 
 test("multicultural presiders select their associated Mass filters", () => {
